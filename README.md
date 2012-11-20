@@ -1,4 +1,4 @@
 miss
 ====
 
-Mislabeled Species identifier
+identifying MISlabeled Species
