@@ -1,0 +1,64 @@
+Found a total of 120 taxa in tree file RAxML_bestTree.RT120
+
+
+This is RAxML version 7.3.0 released by Alexandros Stamatakis in June 2011.
+
+With greatly appreciated code contributions by:
+Andre Aberer (HITS)
+Simon Berger (HITS)
+Nick Pattengale (Sandia)
+Wayne Pfeiffer (SDSC)
+Akifumi S. Tanabe (Univ. Tsukuba)
+
+
+Alignment has 546 distinct alignment patterns
+
+Proportion of gaps and completely undetermined characters in this alignment: 6.26%
+
+RAxML likelihood-based placement algorithm
+
+Using 1 distinct models/data partitions with joint branch length optimization
+
+
+All free model parameters will be estimated by RAxML
+ML estimate of 25 per site rate categories
+
+Partition: 0
+Alignment Patterns: 546
+Name: No Name Provided
+DataType: DNA
+Substitution Matrix: GTR
+
+
+
+
+RAxML was called as follows:
+
+raxmlHPC-SSE3 -f v -s ../mt-co1_Rotifera.phylip -t RAxML_bestTree.RT120 -n EPA -m GTRCAT 
+
+
+RAxML placement algorithm: You provided a reference tree with 120 taxa; alignmnet has 125 taxa
+5 query taxa will be placed using maximum likelihood
+
+RAxML Evolutionary Placement Algorithm
+
+Likelihood of reference tree: -29590.670055
+
+RAxML will place 5 Query Sequences into the 237 branches of the reference tree with 120 taxa
+
+Overall Classification time: 5.958272
+
+
+
+Labelled reference tree including branch labels and query sequences written to file: /home/izquiefo/phd/mislabel/data/olaf/reduced_dataset/RAxML_labelledTree.EPA
+
+Labelled reference tree with branch labels (without query sequences) written to file: /home/izquiefo/phd/mislabel/data/olaf/reduced_dataset/RAxML_originalLabelledTree.EPA
+
+Labelled reference tree with branch labels in portable pplacer/EPA format (without query sequences) written to file: /home/izquiefo/phd/mislabel/data/olaf/reduced_dataset/RAxML_portableTree.EPA.jplace
+
+Classification result file written to file: /home/izquiefo/phd/mislabel/data/olaf/reduced_dataset/RAxML_classification.EPA
+
+Classification result file using likelihood wieghts written to file: /home/izquiefo/phd/mislabel/data/olaf/reduced_dataset/RAxML_classificationLikelihoodWeights.EPA
+
+Classification entropy result file using likelihood wieghts written to file: /home/izquiefo/phd/mislabel/data/olaf/reduced_dataset/RAxML_entropy.EPA
+

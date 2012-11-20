@@ -1,0 +1,41 @@
+new label (taxon to be added) AF416994
+ML EPA-insertion node 49 has label DQ297772
+Max Likelihood placement at node 49 LH -29976.965076 ,weight 0.991034
+['DQ079963']
+Taxonomy aware placement at DQ079963 LH -30006.465593 Weight: 0.000000
+
+
+new label (taxon to be added) EF650603
+seq Label not found for node 9 , internal branch
+Max Likelihood placement at node 9 LH -29891.104426 ,weight 0.569672
+['DQ656810', 'DQ656808']
+Taxonomy aware placement at DQ656810 LH -29897.625913 Weight: 0.000838
+Taxonomy aware placement at DQ656808 LH -29893.324549 Weight: 0.061864
+
+
+new label (taxon to be added) EU751244
+seq Label not found for node 210 , internal branch
+Max Likelihood placement at node 210 LH -29804.138090 ,weight 0.298330
+['EU751050', 'EF650500', 'EF650499', 'EF650512', 'EF650498', 'EF650495', 'EF650490', 'EU499789']
+Taxonomy aware placement at EU751050 LH -29812.469923 Weight: 0.000072
+Taxonomy aware placement at EF650500 LH -29812.616278 Weight: 0.000062
+Taxonomy aware placement at EF650499 LH -29816.073138 Weight: 0.000002
+Taxonomy aware placement at EF650512 LH -29810.285036 Weight: 0.000638
+Taxonomy aware placement at EF650498 LH -29816.252764 Weight: 0.000002
+Taxonomy aware placement at EF650495 LH -29827.706340 Weight: 0.000000
+Taxonomy aware placement at EF650490 LH -29807.028215 Weight: 0.016578
+Taxonomy aware placement at EU499789 LH -29812.661219 Weight: 0.000059
+
+
+new label (taxon to be added) DQ297792
+seq Label not found for node 125 , internal branch
+Max Likelihood placement at node 125 LH -29919.054423 ,weight 0.996703
+['DQ297781', 'DQ297769']
+Taxonomy aware placement at DQ297781 LH -29927.974997 Weight: 0.000133
+Taxonomy aware placement at DQ297769 LH -29943.381601 Weight: 0.000000
+
+
+new label (taxon to be added) DQ089730
+seq Label not found for node 173 , internal branch
+Max Likelihood placement at node 173 LH -30130.076969 ,weight 0.998435
+[]

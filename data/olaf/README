@@ -1,0 +1,37 @@
+> Would the attached do? It's the best that I could do on short
+> notice. It's a CO1 data set for Rotifera that I gleaned from
+> GenBank. BLAST searches revealed that AF416994 (Asplanchna_sieboldi) is
+> probably a fungus, whereas DQ089730 (Seison_nebaliae) is probably a
+> nematode (or close relative thereof).
+
+=================
+What we did:
+
+1. Dataset generation
+we took the 125.phy olaf dataset, and extracted the 2 suspicous sequences as well as 3 random, generating the 5_new_seqs  and the 120.phy dataset (see folder reduced_dataset), then we generated a reference tree with 120 taxa with RAxML by doing a  normal search (RAxML_info.RT120), this is what we call reference_tree.newick
+
+2. EPA search to get all placements
+/home/izquiefo/phd/raxml/standard-RAxML/raxmlHPC-SSE3 -f v -s ../mt-co1_Rotifera.phylip -t RAxML_bestTree.RT120 -n EPA_ALLENTRIES -m GTRCAT
+
+generates all the placements (RAxML_portableTree.EPA_ALLENTRIES.jplace) given the full alignment and the reference tree
+
+3. Get the taxonomy in a format we van compare with the placements
+
+Olaf data was with genbank ids, but the taxonomy we get is with ncbi, thus we had to:
+
+Execute in this order to get a  taxonomy with genbank ids from a phylip alignment
+
+get_genbank_entries.rb # takes genbankid from the phylip file and downloads
+extract_taxonomy_id.rb # takes the genbank entries from folder and outputs taxalist.txt
+
+Now we can generate taxaList.txt, which is the second column of taxalist.txt (just the ncbi ids)
+../../extractTaxonomy.py ../../ncbi.dmp taxaList > taxonomy.out   # the ncbi taxonomy
+
+translate_taxonomy.rb  # takes taxalist.txt to traduce taxonomy.out into taxonomy_a_la_genbank.out 
+
+
+4. Now we run our scripts, which compares "taxonomy-aware" placements against best placements to see if sth. has been mislabeled
+./tree.py data/olaf/reduced_dataset/RAxML_portableTree.EPA_ALLENTRIES.jplace
+data/olaf/taxonomy_a_la_genbank.out > output_analysis_olaf
+
+

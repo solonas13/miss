@@ -1,0 +1,58 @@
+The problem setup is the following:
+Given an alignment with n taxa, a multifurcating ncbi taxonomy with n
+taxa, and a strictly bifurcating ML reference tree with k < n taxa
+(T_ref), we want to check whether the (n-k) new species are outliers
+(or have been mislabeled in the taxonomy). We assume that the ML
+reference tree is reasonably similar to the taxonomy.
+
+1. EPA-based strategy (2 steps)
+We run the EPA-ALL_ENTRIES version of raxml with -s alignment -t
+T_ref. This will provide us all possible placements of each new
+sequence (one by one) in tips and inner branches. Each placement
+includes the LH weight and the LH of the tree of (k+1) taxa.
+
+We run tree.py placements_output taxonomy. This will , for each sequence:
+- output the tree LH for the best ML placement and its weight (note
+the placement may be a tip or an inner branch)
+- find the siblings of the sequence in the taxonomy, and make a list.
+For each element in the list, output LH of the tree and LH weight.
+These are what we call "taxonomy-aware placements"
+
+For example:
+./tree.py data/olaf/reduced_dataset/RAxML_portableTree.EPA_ALLENTRIES.jplace
+data/olaf/taxonomy_a_la_genbank.out > output_analysis_olaf
+
+2. EPA-based strategy TODO
+- Extend the code so that the list includes not only the siblings but
+also all internal branches up to the LCA (least common ancestor). We
+can then sum all LH weights from that list.
+- Also keep track of the distance between ML best placement and the
+taxonomy-aware placements
+- Present the results as a sorted list. Sequences where the ML
+placement has a weight close to 1 and the taxonomy-aware placements
+sum up to a value close to 0 (and are far away) are candidates to be
+mislabeled
+
+3. Biological data (Olaf dataset)
+- This datasets comprises 125 taxa, out of which 2 are considered to
+be mislabeled (see README in data/olaf).
+- We took those 2 out together with 3 others and inferred a reference
+tree (T_ref) of 120 taxa.
+- Then we ran method described in (1) and got the output as saved in
+the file output_analysis_olaf (on gets identified, the other
+constitutes a special case: no siblings)
+
+4. Biological dataset (Smith)
+@Stephen we had a look at the data you shared with Andre (see
+data/smith) but did not figure out how we can use it to test this.
+
+5. Simulated dataset
+- We can simulate data, get a true tree and a true  taxonomy
+(initially we can make the taxonomy strictly bifurcating to make
+things easier), and simply swap taxa to fabricate mislabeled species
+(also keeping track of how far away they are).
+
+So the idea would be to have a good setup to run this method and
+compare it with the one Stephen has developed. We should coordinate
+that we use the same simulated/biological datasets and try to evaluate
+both methods on the same data.
