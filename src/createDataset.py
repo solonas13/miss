@@ -1,53 +1,191 @@
 #! /usr/bin/python
 
-from tree import *
-import random 
-from Bio import Phylo
-from cStringIO import StringIO
+# from tree import *
+# from Bio import Phylo
+# from cStringIO import StringIO
 
+USAGE ="""./script <id> <aln> <numMisslabel> <mislabelDepth> [<tree>] 
 
-USAGE ="""
-./script <aln> <tree>
-
+* aln: alignment file 
+* numMisslabel: number of mislabels to create in the dataset 
+* mislabelDepth: number of ranks by which the taxon gets mislabelled. 
+* tree: ml tree. If option is provided, a taxonomy will be created
+  from the tree, otherwise a parsimony tree will be created from the
+  alignment.
 """
+
+numThreads = 4
+maxiter = 50 
+maxDist = 0.10 
 
 
 import sys
+import os 
+import random 
+from taxonomy import * 
+import copy
 
-if len(sys.argv) != 3: 
-   print USAGE
+
+############################
+# parse command line args  #
+############################
+
+raxml="../lib/standard-RAxML/raxmlHPC-PTHREADS-SSE3"
+
+try:
+   with open(raxml) as f: pass
+except IOError as e:
+   print "Please install standard raxml into the lib folder and compile the non-pthreads sse3-version."
    sys.exit()
 
 
-alnFile=sys.argv[1]
-treeFile=sys.argv[2]
+if len(sys.argv) < 4 : 
+   print USAGE
+   sys.exit()
 
-tree = Phylo.read(treeFile, "newick")
-taxa = map(lambda x : x.name ,  tree.get_terminals())
-toMislabel = random.choice(taxa) 
-print "mislabelling "  + toMislabel
+theId = sys.argv[1]
+alnFile=sys.argv[2]
+numMiss = int(sys.argv[3]) 
+mislabelRank = int(sys.argv[4])
 
-
-## :TODO: we must ensure in tree.py that the tree is unrooted ... => use newick utils 
-
-tok = sys.argv[0].split("/") 
-tok = tok[0:-1]
-rootDir =  "/".join(tok)
-reroot_cmd=rootDir + "../lib/newick-utils-1.6/src/nw_reroot"
-
+createParsTree = True
+treeFile = ""
+if len(sys.argv) == 6: 
+   createParsTree = False
+   treeFile = sys.argv[5]
 
 
-lwTreeByTaxon = {}
-for taxon in taxa  : 
-    print "evaluating lw for " + taxon
-    tmpFile = "pruned.tre"
-    tree = Phylo.read(treeFile, "newick")
-    tree.prune(taxon)
-    Phylo.write(tree, tmpFile, "newick")
-    
-    lwTree = Tree(tmpFile)
-    lwTree.computeLWs(alnFile, False)
-    lwTreeByTaxon[taxon] = lwTree
-    os.remove(tmpFile)
+
+##############
+# functions  #
+##############
+def createSimilarTree(alnFile, maxDist, maxIter, theId, useParsimony=True): 
+   """ 
+   create a parsimony tree from the alignment file <alnFile> with
+   relative RF-distance < <maxDist> (float).
+   The raxml id for this run is <theId>. 
+
+   If you specify useParsimony as False, then instead of a parsimony,
+   we will create a quick&dirty fastTree with raxml -f F. 
+   
+   The program will give up after <maxIter> iterations. Then, it
+   yields the closest tree encountered so far.
+
+   If a partition file exists in the same folder, then it will be used
+   (important for protein data).
+   """ 
+   distanceTooHigh = True
+   seed = random.randint(0,1000000000)
+
+   baseName = os.path.splitext(alnFile)[0]
+   if os.path.exists(baseName + ".par") : 
+      partitionString = "-q " +  baseName + ".par"
+   else : 
+      partitionString = ""
 
 
+   origTree = baseName + ".tre"
+   if not os.path.exists(origTree): 
+      print "Expected tree " + origTree + 'to exist. It does not.' 
+      sys.exit()
+
+   if useParsimony: 
+      resultBase = "RAxML_parsimonyTree."
+   else : 
+      resultBase = "RAxML_fastTree." 
+   resultTree = resultBase + theId
+
+   bestDistance = 1.0
+   bestTree = resultBase + theId + ".saved"
+   while distanceTooHigh: 
+      parsimonyString = "-y" if useParsimony else "-f F"
+
+      treeCmd = " ".join([
+            raxml, 
+            "-T", str(numThreads), 
+            "-s" , alnFile, 
+            partitionString, 
+            "-n" , theId, 
+            parsimonyString, 
+            "-m", "GTRCAT",
+            "-p" , str(seed),
+            "> /dev/null"
+            ])  
+
+      os.system(treeCmd)
+
+      treeFile = resultBase + theId
+      cmd = "cat " + treeFile + " " + origTree + " > bothTrees"
+      os.system(cmd) 
+
+      # compute RF distance 
+      rfCmd = " ".join([
+            raxml, 
+            "-T", str(numThreads), 
+            "-s" , alnFile, 
+            partitionString, 
+            "-n" , theId + "Eval", 
+            "-m", "GTRCAT",
+            "-z", "bothTrees",
+            "-f r > /dev/null", 
+            ])
+      os.system(rfCmd)
+      
+      rfFile = "RAxML_RF-Distances." + theId + "Eval"
+      rfDistance = float(open(rfFile, "r").readline().strip().split(" ")[3])
+      print "The rf-distance was " + str(rfDistance)
+
+      if rfDistance < bestDistance: 
+         os.system("cp " + treeFile + " "  +  bestTree) 
+         bestDistance = rfDistance 
+
+      os.system("rm bothTrees *." + theId + " *." + theId + "Eval")
+      seed += 1 
+      distanceTooHigh =  rfDistance > maxDist 
+
+   return (bestDistance, bestTree)
+
+   
+#########
+# main  #
+#########
+if __name__ == "__main__": 
+   refTree = ""
+   if createParsTree: 
+      result = createSimilarTree(alnFile, maxDist, maxiter, random.randint(0,99999999999), False)
+      # print "distance of determined tree to reference tree: " + str(result[0])
+      # print "the new tree was saved to " + result[1]
+      refTree = result[1]
+   else : 
+      # print "will condense given tree " + treeFile
+      refTree = treeFile
+      result = (0, "")
+   
+   tax = Taxonomy()
+   tax.init_extractRandomlyFromTree(refTree)
+
+   initTax = copy.deepcopy(tax)
+
+   # mislabeling the taxa 
+   leaves = list(tax.getLeaves())
+   random.shuffle(leaves)
+   toMislabel = leaves[0:numMiss]
+
+   for toMis in  toMislabel: 
+      currentTax = copy.deepcopy(tax)
+      while tax == currentTax: 
+         tax.mislabel(toMis, mislabelRank, mislabelRank)
+
+   # print the results 
+   initTax.saveToFile("correctTaxonomy." + theId + ".tax") 
+   tax.saveToFile("mislabeledTaxonomy." + theId + ".tax")
+
+   # write info file 
+   fh = open("info." + theId + ".txt", "w")
+   fh.write("mislabelledTaxa=%s\n" % ",".join(toMislabel))   
+   fh.write("distanceOfTaxonomyToRefTree=%f\n" % result[0])
+   fh.write("mislabelLevel=%d\n" % (mislabelRank-1))
+   fh.write("initialAlignment=%s\n" % alnFile)
+   fh.write("correctTaxonomy=%s\n" % initTax.getNewickString())
+   fh.write("mislabelledTaxonomy=%s\n" % tax.getNewickString())
+   fh.close()

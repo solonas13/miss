@@ -3,6 +3,7 @@
 import sys 
 import random 
 import newick as nw 
+import copy 
 
 
 # a flexible representation of a taxonomy that
@@ -81,12 +82,25 @@ class Taxonomy(object):
             else : 
                 self.parentToChildren[parent] = [child]
 
+        if self.root == None: 
+            self.root = self.__regenerateRoot()
+            # print "determined root to be " + self.root
+            
+    def __regenerateRoot(self):
+        leaves = self.getLeaves()
+        innerNodes = set(self.parentToChildren.keys()) 
+        innerNodesWoRoot = set(self.childToParent.keys())  - leaves
+        assert(len(innerNodes) == len(innerNodesWoRoot) + 1)
+        root = innerNodes - innerNodesWoRoot
+        root = list(root)[0]
+        return root
+
 
     def saveToFile(self, fn): 
-        "Saves the taxonomy to a file <fn>. This file can later be read again with the function init_parseTaxFile(). "
+        "Saves the taxonomy to a file <fn>. This file can later be read again with the function init_parseTaxFile()."
         fh = open(fn, "w")
         for child in self.childToParent: 
-            fh.write("%s\t%s\n", child, self.childToParent[child])
+            fh.write("%s\t%s\n" % ( child, self.childToParent[child] ) )
         fh.close()
 
 
@@ -165,7 +179,14 @@ class Taxonomy(object):
 
 
     def mislabel(self, leave, numRankUp, numRankDown): 
-        "mislabel taxon <leave>. Put this taxon <numRankUp> up and then <numRankDown>" 
+        """mislabel taxon <leave>. Put this taxon <numRankUp> up and then <numRankDown> 
+
+        There is a chance, that taxa will not get mislabelled that
+        way. You should check on equality later with origTax ==
+        mislabelTax, where origTax is the taxonomy before and
+        mislabelTax is a deep copy on which the mislabel method has
+        been called.
+        """ 
         self.dirty = True
         
         leaves = self.getLeaves()            
@@ -175,7 +196,7 @@ class Taxonomy(object):
         previous = leave
         currentNode = leave 
         firstParent = self.childToParent[leave]
-        for i in range(1,numRankUp): 
+        for i in range(0,numRankUp): 
             if currentNode == self.root: 
                 break
             previous = currentNode
@@ -186,7 +207,7 @@ class Taxonomy(object):
         self.parentToChildren[firstParent].remove(leave)
 
         # go m steps down 
-        for i in range(1, numRankDown): 
+        for i in range(0, numRankDown): 
             if(currentNode in leaves ):
                 currentNode = self.childToParent[currentNode]
                 break
@@ -200,6 +221,26 @@ class Taxonomy(object):
         self.parentToChildren[currentNode].append(leave)
         self.cleanup()
 
+
+    def __eq__(self,other): 
+        """
+        Test equality with == 
+        """
+
+        assert(type(other) == Taxonomy)
+        
+        if self.getMaxLevel() != other.getMaxLevel(): 
+            return  False
+
+        assert(self.getMaxLevel() == other.getMaxLevel())
+        leaves = self.getLeaves()
+        md = self.getMaxLevel()
+
+        isEqual = True
+        for leave in leaves: 
+            for level in range(1, md) : 
+                isEqual = isEqual and ( set(self.getNthBipartition(leave, level)) == set(other.getNthBipartition(leave, level)) )         
+        return isEqual
 
 
 ############
@@ -366,24 +407,15 @@ if __name__ == "__main__":
     if len(sys.argv) != 2: 
         print "usage: ./script <file>"
         sys.exit()
-        
-    raw = open(sys.argv[1],"r").readline().strip()
-
 
     tax = Taxonomy()
-    tax.init_extractRandomlyFromTree(sys.argv[1])
-    print tax.getChildToParentString()
-    print "=="
-    print tax.getParentToChildrenString()
-    print "=="
-    print tax.getNewickString()
+    tax.init_parseTaxFile("test.tax")
 
-    # tax.init_parseTaxFile(sys.argv[1])
-    # print tax.getNewickString()
-    # print "====" 
-    # print tax.getMaxLevel()
-        
-    # for i in range(0,10): 
-    #     tax.mislabel("49", 3 ,3)
-    #     print tax.getNewickString()
+    tax2 = Taxonomy()
+    tax2.init_parseTaxFile("test2.tax")
+    
+    if tax == tax2: 
+        print "tax are same"
+    else : 
+        print "tax are different"
 
