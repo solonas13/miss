@@ -1,8 +1,7 @@
 #! /usr/bin/python
 
-# from tree import *
-# from Bio import Phylo
-# from cStringIO import StringIO
+
+
 
 USAGE ="""./script <id> <aln> <numMisslabel> <mislabelDepth> [<tree>] 
 
@@ -15,22 +14,22 @@ USAGE ="""./script <id> <aln> <numMisslabel> <mislabelDepth> [<tree>]
 """
 
 numThreads = 4
-maxiter = 50 
-maxDist = 0.10 
+maxiter = 10 
+maxDist = 0.1 
 
 
 import sys
 import os 
 import random 
 from taxonomy import * 
+
 import copy
 
 
 ############################
 # parse command line args  #
 ############################
-
-raxml="../lib/standard-RAxML/raxmlHPC-PTHREADS-SSE3"
+raxml=os.path.dirname( sys.argv[0])  + "/../lib/standard-RAxML/raxmlHPC-PTHREADS-SSE3"
 
 try:
    with open(raxml) as f: pass
@@ -98,7 +97,7 @@ def createSimilarTree(alnFile, maxDist, maxIter, theId, useParsimony=True):
    bestDistance = 1.0
    bestTree = resultBase + theId + ".saved"
    while distanceTooHigh: 
-      parsimonyString = "-y" if useParsimony else "-f F"
+      parsimonyString = "-y" if useParsimony else "-f E"
 
       treeCmd = " ".join([
             raxml, 
@@ -135,29 +134,25 @@ def createSimilarTree(alnFile, maxDist, maxIter, theId, useParsimony=True):
       rfDistance = float(open(rfFile, "r").readline().strip().split(" ")[3])
       print "The rf-distance was " + str(rfDistance)
 
-      if rfDistance < bestDistance: 
+      if rfDistance < bestDistance and rfDistance != 0: 
          os.system("cp " + treeFile + " "  +  bestTree) 
          bestDistance = rfDistance 
 
       os.system("rm bothTrees *." + theId + " *." + theId + "Eval")
       seed += 1 
-      distanceTooHigh =  rfDistance > maxDist 
+      distanceTooHigh =  rfDistance > maxDist or rfDistance == 0
 
    return (bestDistance, bestTree)
 
-   
 #########
 # main  #
 #########
 if __name__ == "__main__": 
    refTree = ""
-   if createParsTree: 
-      result = createSimilarTree(alnFile, maxDist, maxiter, random.randint(0,99999999999), False)
-      # print "distance of determined tree to reference tree: " + str(result[0])
-      # print "the new tree was saved to " + result[1]
+   if createParsTree:       
+      result = createSimilarTree(alnFile, maxDist, maxiter, str(random.randint(0,99999999999)), False)
       refTree = result[1]
    else : 
-      # print "will condense given tree " + treeFile
       refTree = treeFile
       result = (0, "")
    
@@ -168,13 +163,23 @@ if __name__ == "__main__":
 
    # mislabeling the taxa 
    leaves = list(tax.getLeaves())
-   random.shuffle(leaves)
-   toMislabel = leaves[0:numMiss]
+   random.shuffle(leaves)   
+   toMislabel = leaves
+   mislabeled = []
 
    for toMis in  toMislabel: 
       currentTax = copy.deepcopy(tax)
+      ctr = 0
       while tax == currentTax: 
          tax.mislabel(toMis, mislabelRank, mislabelRank)
+         if ctr == 5 : 
+            break
+         ctr += 1 
+ 
+      if not ( tax ==  currentTax )  : 
+         mislabeled.append(toMis)
+      if len(mislabeled) == numMiss: 
+         break 
 
    # print the results 
    initTax.saveToFile("correctTaxonomy." + theId + ".tax") 
@@ -182,7 +187,7 @@ if __name__ == "__main__":
 
    # write info file 
    fh = open("info." + theId + ".txt", "w")
-   fh.write("mislabelledTaxa=%s\n" % ",".join(toMislabel))   
+   fh.write("mislabelledTaxa=%s\n" % ",".join(mislabeled))   
    fh.write("distanceOfTaxonomyToRefTree=%f\n" % result[0])
    fh.write("mislabelLevel=%d\n" % (mislabelRank-1))
    fh.write("initialAlignment=%s\n" % alnFile)
