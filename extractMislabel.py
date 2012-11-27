@@ -5,126 +5,152 @@ import random
 import re
 import sys
 
-def parse_raxml_output ( filename ):
-  f = open ( filename, 'r' )
-  s = f . read ()
+def label_exists ( tree, label ):
+  x = re . search ( label + "[\,\)]", tree )
+  if x == None:
+    return False
+  else:
+    return True
 
-  s = s . split ( '\n' );
-  rt = s[1]
-  pl = s[3]
+def read_raxml_output ( filename ):
+  s = open ( filename ) . read ()
+  s = s . split ( '\n' )
 
-  return [rt, pl]
+  return ( s[1], s[3:] )    # return reference tree and placement strings
 
-def construct_reference_tree ( rt ):
-  # Print the reference tree RT
+def normalise_reference_tree ( rt ):
   rt = re . sub ( r"^[^(]*","", rt )
   rt = re . sub ( r":[^,()]*", "", rt )
   rt = rt[:-3]
 
   return ( rt )
 
-def maximum_likelihood ( p ):
-  x = re . search ( ":\[\[(\d+),\s*([^,]+)", p )
+def get_node_of_label ( tree, label ):
+  node = re . search ( label + ":" + "\d*\.\d*\{(\d+)\}", tree )
+  return ( node . group ( 1 ) )
 
-  return ( x . group ( 1 ), x . group ( 2 ) )
+def get_label_of_node ( tree, node ):
+  label = re . search ( "([\w]+):\d*\.\d*\{" + node + "\}", tree )
+  if ( label != None ):
+    return ( label . group ( 1 ) )
+  print "seq Label not found for node " + node + " , internal branch"
+  return False 
 
-def find_inserted_label ( p ):
+def get_max_lh_node ( placement, node ):
+  #x = re . search ( "\[" + node + "(\,\s*\-?\d*\.?\d*){3}\,\s*(\-?\d*\.?\d*)\]", placement )
+  #x = re . search ( "\[" + node + "\,\s*(\-?\d*\.?\d*)", placement )
+  #return ( x . group ( 1 ) )
+  x = re . search ( "\[" + node + "\,\s*(\-?\d*\.?\d*),\s*(\d+\.\d+)", placement )
+  return  " LH " + x . group ( 1 ) + " Weight: " +  x . group ( 2 ) 
+
+# Get the node with the maximum likelihood
+def get_max_lh ( placement ):
+  #x = re . search ( ":\[\[(\d+),\s*([^,]+)", placement )
+  x = re . search ( ":\[\[(\d+),\s*([^,]+),\s*(\d+\.\d+)", placement )
+  if ( x != None ):
+    return ( x . group ( 1 ), x . group ( 2 ), x . group ( 3 ) )
+  return False
+
+
+def add_sibling ( tree, where, node ):
+  ltree = re . findall ( r"[\w]+|[\(\)\,\;]", tree )
+  i = ltree . index ( where )
+  ltree . insert ( i + 1, ')' )
+  ltree . insert ( i, ',' )
+  ltree . insert ( i, node )
+  ltree . insert ( i, '(' )
+  return "" . join ( ltree )
+
+def get_siblings ( tree, x ):
+  p = re . search ( x + "[\,\)]", tree )
+  if p == None:
+    print "No such node found"
+    return
+
+  y = tree . partition ( p . group ( 0 ) )
+  siblings = []
+
+  if y[1] == y[2] == "":
+    print "Separator not found"
+    return
+  
+  pre  = re . findall ( r"[\w]+|[\(\)\,\;]", y[0] )
+  post = re . findall ( r"[\w]+|[\(\)\,\;]", y[2] )
+
+  level = 0
+  for c in reversed ( pre ):
+    if c == ')':
+      level += 1
+    elif c == '(':
+      if level == 0:
+        break;
+      level -= 1
+    elif c != ',':
+      if level == 0:
+        siblings . append ( c )
+
+  if y[1][-1:] != ')':
+    level = 0
+    for c in post:
+      if c == '(':
+        level += 1
+      elif c == ')':
+        if level == 0:
+          break;
+        level -= 1
+      elif c != ',':
+        if level == 0:
+          siblings . append ( c )
+    
+  return siblings
+
+def get_inserted_label ( p ):
   label = re . search ( "\"n\":\[\"(.*)\"\]", p );
   return label . group ( 1 );
-
-def compute_brackets_to_label ( rt, label ):
-  tmp = re . search ( "(.*)" + label, rt );
-  tmp = tmp . group ( 1 );
-  print tmp;
-
-  opening = len ( re . findall ( r"\(", tmp ) )
-  closing = len ( re . findall ( r"\)", tmp ) )
-  commas  = len ( re . findall ( r"\,", tmp ) )
-
-  return ( opening, closing, commas )
-
-def compute_brackets_to_node ( x, node ):
-  tmp = re . search ( "(.*)\{" + str ( node ) + "\}", x );
-  tmp = tmp . group ( 1 );
-  opening = len ( re . findall ( r"\(", tmp ) )
-  closing = len ( re . findall ( r"\)", tmp ) )
-  commas  = len ( re . findall ( r"\,", tmp ) )
-  return ( opening, closing, commas )
-
-def insert_node ( label, ins_open, ins_close, commas, rt ):
- for i in range ( len ( rt ) ):
-   if rt[i] == '(':
-     ins_open -= 1
-   elif rt[i] == ')':
-     ins_close -= 1
-   elif rt[i] == ',':
-     commas -= 1
-   if ins_open == 0 and ins_close == 0 and commas == 0:
-     break
  
 
- i += 1;
- leaf = 0
- if rt[i] != '(' and rt[i] != ')' and rt[i] != ',':
-   leaf = 1;
-   open_bracket_pos = i;
- 
- if leaf == 1:
-   while rt[i] != ',' and rt[i] != ')':
-     i += 1;
-   rt = rt[:i] + ',' + label + ')' + rt[i:]
-   rt = rt[:open_bracket_pos] + '(' + rt[open_bracket_pos:]
-   return rt;
-   #print rt
- else:
-   rt = rt[:i] + ',' + label + ')' + rt[i:]
-
-   stack = 0;
-   i -= 1;
-
-   stack = 1
-   while stack != 0:
-    i -= 1
-    if rt[i] == '(':
-      stack -= 1;
-    elif rt[i] == ')':
-      stack += 1
-   rt = rt[:i] + '(' + rt[i:]
-   return rt;
-   #print rt
- 
 def main ( argv = None ):
   if argv is None: argv = sys . argv
 
   if len ( argv ) != 3:
-    print " usage: ./tree.py <RAxML.out> <taxonomy.out>";
+    print "usage: ./tree.py <RAxML.out> <taxonomy.out>";
     sys . exit ( 0 )
 
-  x  = parse_raxml_output ( argv[1] )
-  rt = construct_reference_tree ( x[0] )
-  (node,L1) = maximum_likelihood ( x[1] )
-  label = find_inserted_label ( x[1] )
+  # get the reference tree and placements
+  ( rt, placements ) = read_raxml_output ( argv[1] )
+  ref_tree = normalise_reference_tree ( rt )
+  print ref_tree
 
-  print "RT = " + rt
-  print "Label = " + label
-  print "Node of max likelihood = " + str ( node )
+  # read and print the taxonomy tree
+  tax_tree = open ( argv[2] ) . read ()
+  print tax_tree . rstrip ( '\n' )
 
-  ( ins_open, ins_close, ins_comma ) = compute_brackets_to_node ( x[0], node )
-  
-  #print "Ins_open:  " + str ( ins_open )
-  #print "Ins_close: " + str ( ins_close )
-  #print "Comma: " + str ( ins_comma )
+  for p in placements:
+    if get_max_lh ( p ) == False:
+      return
+    (node, L1, W1 ) = get_max_lh ( p )
 
-  t1 = insert_node ( label, ins_open, ins_close, ins_comma, rt )
-  
-  print "T1 = " + t1
-  print "L1 = " + L1
-  
-  #( opening, closing, comma ) = compute_brackets_to_label ( rt, "Seq21" )
-  #print "Opening brackets: " + str ( opening )
-  #print "Closing brackets: " + str ( closing )
+    print
+    new_label = get_inserted_label ( p )
+    print "\nnew label (taxon to be added) " + new_label
+    label = get_label_of_node ( rt, node )
+    if label != False:
+      print "ML EPA-insertion node " + node + " has label " + label
+      tree = add_sibling ( ref_tree, label, new_label )
+      #print tree
+    print "Max Likelihood placement at node " + node +  " LH " + L1 + ", weight " + W1
 
-
+    siblings = get_siblings( tax_tree, new_label )
+    print siblings
+    for label in siblings:
+      if label_exists ( ref_tree, label ) == False:
+        continue
+      tree = add_sibling ( ref_tree, label, new_label )
+      #print tree
+      node = get_node_of_label ( rt, label )
+      print "Taxonomy aware placement at " + label + get_max_lh_node ( p, node )
 
 if __name__ == "__main__":
   sys . exit ( main ( ) )
+
+
