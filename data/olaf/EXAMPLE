@@ -1,0 +1,13 @@
+EPA-based approach
+
+First, we run the extract taxonomy script
+
+./extractTaxonomy.py ncbi.dmp ./data/olaf/taxaList.txt > olaf_taxonomy_tree
+
+Second, we run RAxML
+
+./raxmlHPC -m GTRCAT -f v -n EPA_ALLENTRIES -s /home/pississn/miss/data/olaf/mt-co1_Rotifera.phylip -t  /home/pississn/miss/data/olaf/reduced_dataset/RAxML_bestTree.RT120
+
+Third, we run ./tree.py
+
+./extractMislabel.py ./data/olaf/RAxML_portableTree.EPA_ALLENTRIES.jplace ./data/olaf/olaf_taxonomy_tree
