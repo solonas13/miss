@@ -1,66 +1,160 @@
-#! /usr/bin/python
+#! /usr/bin/python 
 
-from Bio import Phylo
-from cStringIO import StringIO
-import subprocess
+
+import os
+import sys 
+
+import json
 import glob 
-import random 
-import os 
 import re 
+import random
+import subprocess
 
-# This as a python class that contains both the tree with branch
-# lengths and also computes the insertion lws for a given taxo. 
-# 
-# see the main function for an example
-
-
-
-
-pattern = re.compile('^\s+"tree": "(.*)",\s*')
-placePattern = re.compile('\s*{"p":\[(.*)\], "n":\[.*\]}')
+from ete2 import * 
+from pprint import pprint
+from tempfile import  * 
 
 
-
-# TODO 
-raxml="/lhome/labererae/proj/mislabel-repo/lib/standard-RAxML/raxmlHPC-PTHREADS-SSE3"
-threads="4"
+numCores = 4 
+raxmlPath = os.path.dirname(sys.argv[0]) + "/../lib/standard-RAxML/raxmlHPC-PTHREADS-SSE3"
 
 
+class LwTree(Tree):     
+    """ A tree derived from the ete2 tree including likelihood weights """ 
 
-def  maptotupleML(x) : 
-    tok = x.split(",")
-    return (int(tok[0]), float(tok[2]))
+    
+    # TODO does not work =( 
+    # def __init__(self, treeFile): 
+    #     if not os.path.exists(raxmlPath): 
+    #         sys.stderr.write("expecting path to raxml: %s\nPlease install!" % raxmlPath)
+    #     Tree.init_self
+        # super(Tree, self).__init__(treeFile)
+        # if hasattr(self.get_descendants()[0], 'lw'): 
+        #     print "has it"
+        #     for desc in self.get_descendants():
+        #         desc.lw = float(desc.lw)
+        # else : 
+        #     print "has not it "
+    
+    def regenerateLws(self): 
+        """
+        This is a hack. If we re-read annotated trees (because we
+        precomputed the likelihood weights), then the labels are
+        incorrectly parsed as strings instead of floats.
+        """
+        for desc in self.get_descendants():
+            desc.lw = float(desc.lw)
+
+                
+            
+            
+    def pruneTaxa(self, listOfTaxa):         
+        "Prunes a list of taxa. This inverts the method provided by ete2 for convenience. "
+        self.prune(list(set(self.get_leaf_names()) - set(listOfTaxa)))
 
 
-class Tree(object):
-    def __init__(self, tree):
-        self.treeFile = tree
-        self.origTree = Phylo.read(tree, "newick")
-        self.lwTree = None
+
+    def __annotate__(self, lwTree): 
+        assert( 1.0 - sum(map(lambda x : x.dist, lwTree.get_descendants()))  < 0.0001 )
+
+        for desc in lwTree.get_descendants(): 
+            if desc.is_leaf(): 
+                res = self.search_nodes(name=desc.get_leaf_names()[0])
+                assert(len(res) == 1 )
+                res[0].add_feature("lw", desc.dist) 
+            else : 
+                leaves = desc.get_leaf_names()
+                ancNode = self.get_common_ancestor(leaves)
+                assert(len(leaves) == len(ancNode.get_leaf_names()))
+                ancNode.add_feature("lw",  desc.dist) 
+
+        # did we get all lws? 
+        assert(1.0 - sum(  map(lambda x : x.lw, self.get_descendants()))  < 0.0001  ) 
+
+
+    def __annotateWithParsLws(self, jsonString): 
+        data =  json.loads(jsonString)
+
+        positions = map(lambda x : x[0], data['placements'][0]['p']) 
+        lws = 1 / float(len(positions)) 
+        
+        lwMap = {}
+        for i in range(0, len(positions)): 
+            lwMap[positions[i]] = lws
+
+        treeString = data['tree'] 
+        treeString = re.sub(":[0-9\.]*{([0-9]*)}",
+                            lambda x : 
+                            ((":" +  str(lwMap[int(x.group(1))]) ) 
+                             if  lwMap.has_key(int(x.group(1))) 
+                             else ":0.0" ) 
+                            ,treeString ) 
+        lwTree = Tree(treeString, format=1)
+        self.__annotate__(lwTree)
+
+
+    def __annotateWithAllLws(self, jsonString):
+        data =  json.loads(jsonString)
+
+        positions = map(lambda x : x[0], data['placements'][0]['p']) 
+        lws = map(lambda x : x[2], data['placements'][0]['p']) 
+
+        lwMap = {}
+        for i in range(0, len(positions)): 
+            lwMap[positions[i]] = lws[i]
+
+        treeString = data['tree']
+        
+        treeString = re.sub(":[0-9\.]*{([0-9]*)}", 
+                      lambda x :
+                          ':' + str(lwMap[int(x.group(1))]),treeString ) 
+        lwTree = Tree(treeString, format=1)
+        self.__annotate__(lwTree)
+
+
 
     def computeLWs(self, alnFile, ml=True): 
-        method = "v"
-        if not ml: 
-            method = "y"
-            
+        """ Computes likelihood weights and annotates it to the
+        tree. Important: you'll have to assure yourself, that the
+        alignment only contains one more taxon than the tree (e.g.,
+        prune first)"""         
+        
+        tmpFile = mkstemp()
+        tmpFileName = tmpFile[1]
+        
+        self.unroot()
+        self.write(format=1, outfile=tmpFileName)
+        
+        # prepare raxml run 
         theid = str(random.randrange(999999999))
-        run = [raxml , 
-               "-T", threads,
+
+        run = [raxmlPath , 
+               "-T", str(numCores),
                "-s", alnFile,
-               "-t", self.treeFile,
+               "-t", tmpFileName,
                "-m",  "GTRGAMMA",
-               "-f", method,
+               "-f", ("v" if ml else "y" ),
                "-n" , theid 
                ]
+
+        # :TRICKY: if a partition file is needed, we'll determine that
+        # here. Notice, that this requires, that the partition file
+        # bears the same name the aln file, but with file extension
+        # .par.         
+        potentialPartitionFile = os.path.splitext(alnFile)[0] + ".par"        
+        if os.path.exists(potentialPartitionFile): 
+            run.append("-q")
+            run.append(potentialPartitionFile)
         
         with open(os.devnull, "w") as fnull: 
             bla = subprocess.call(run, stdout = fnull)
-        jsonFile = glob.glob(os.getcwd() + "/RAxML*." + theid + ".jplace")[0]        
-        string = self.__createTreeFileWithLws(jsonFile, ml)
-        self.lwTree = Phylo.read(StringIO(string), "newick") 
-        c = self.lwTree.find_clades().next()
-        c.branch_length=0
-        
+        os.remove(tmpFileName)
+
+        if(ml): 
+            self.__annotateWithAllLws(open("RAxML_portableTree." + theid + ".jplace", "r").read())
+        else : 
+            self.__annotateWithParsLws(open("RAxML_portableTree." + theid + ".jplace", "r").read())
+
         # cleanup 
         for elem in glob.glob(os.getcwd() + "/*." + theid): 
             os.remove(elem)    
@@ -68,88 +162,69 @@ class Tree(object):
             os.remove(elem)
 
 
+    def getLcaScore(self, bipartition): 
+        """
+        The lca score: find the lca of all the taxa in bipartition and
+        sum up the liklihood weights in the subtree below the lca. 
+        Thus the score ranges in [0,1]
+        """ 
+        # :TODO: unrooting necessary? 
+        # self.unroot()
 
-    def __createTreeFileWithLws(self, jsonFile, ml=True ): 
-        lines = open(jsonFile, "r").readlines()
+        bipartition = set(bipartition)
 
-        treeMatches = filter(lambda x : x.strip().startswith('"tree":') ,lines)
-        assert(len(treeMatches) == 1)
-        treeMatches = treeMatches[0]
-        match = pattern.match(treeMatches)
-        assert(match)        
-        tree = match.group(1)
+        # if len(bipartition) == 1 :
+        #     res = self.search_nodes(name=desc.get_leaf_names()[0])
+        #     assert(len(res) == 1) 
+        #     score =  res.lw 
+        # else : 
+        subtree = self.get_common_ancestor(list(bipartition))
+        score = sum(map(lambda x : x.lw, subtree.get_descendants())) 
 
-        result = ""
-        parseNow = False
-        for line in lines: 
-            if parseNow : 
-                match = placePattern.match(line.strip())
-                assert(match)
-                result = match.group(1)
-                break
-            else: 
-                if(line.strip().startswith('"placements"')): 
-                    parseNow = True
+        return score 
+
+
+    def getOverlapScore(self, bipartition): 
+        """
+        The score, Andre proposed: the likelihood weight at each
+        branch is weighted by the proportion of leaves that are of the
+        same rank as the mislabel candidate.
+        """
+        # :TODO: unrooting necessary? 
+        # self.unroot()
         
-        assert(result)
+        bipartition = set(list(bipartition)) 
+        # bipComplement = set(self.get_leaf_names()) - bipartition
 
-        placements = filter(lambda x : x != "" , map(lambda x :  x.strip("[,") , result.split("]")))
-
-        if ml: 
-            placeDict = {}
-            for p in map( maptotupleML, placements) : 
-                placeDict[p[0]] = p[1]        
-            tree = re.sub(":[0-9\.]*{([0-9]*)}", 
-                          lambda x : ':' + str(placeDict[int(x.group(1))]),tree ) 
-        else : 
-            placeDict = {} 
-            num = float(len(placements)) 
-            for p in placements: 
-                tok = p.split(",")
-                placeDict[int(tok[0])] = float(1) / num
-            tree = re.sub(":[0-9\.]*{([0-9]*)}", 
-                          lambda x :   ":" + str(placeDict.get(int(x.group(1)), 0.0)) , tree ) 
-        return  tree
-
-
-    def __str__(self):
-        return str(self.origTree) + "\n" + str(self.lwTree)
-
-    
-    def scoreBipartition(self, bip, withComplement = False): 
-        "Uses the likelihood weights in to score each bipartition in the tree using bip as reference."
-        allLeaves = set(map(lambda x : x.name ,  self.lwTree.get_terminals() ) )
-        bip = set(bip)
-
-        score = 0
+        score =  sum(map(lambda x :  x.lw *  float(len(bipartition &  set(x.get_leaf_names() ) ))  /  float(len(set(x.get_leaf_names() ) )) ,
+                         self.get_descendants()) ) 
         
-        for clade in self.lwTree.find_clades(): 
-            lw = clade.branch_length
-            
-            bipHere = set(map(lambda x : x.name , clade.get_terminals()))             
-            complBipHere = allLeaves - bipHere 
-
-            scoreA = float(len(bip & bipHere) ) / float(len(bipHere)) 
-            if withComplement and len(complBipHere) != 0 : 
-                scoreB = float(len(bip & complBipHere) ) / float(len(complBipHere)) 
-                scoreA = max(scoreA,scoreB)
-            score += scoreA * lw 
-        print score 
+        # sometimes summing leads to values > 1.0
+        return min(score,1.0) 
+        
 
 
+USAGE= """./script <tree> <taxon> <aln> 
+
+Compute likelihood weights for <taxon> on <tree> (still including
+<taxon>). The reference alignment <aln> also already includes the
+taxon.
+"""
 
 if __name__ == "__main__": 
-    treeFile = "/lhome/labererae/proj/mislabel-repo/data/trees/150.tre"
-    alnFile = "/lhome/labererae/proj/mislabel-repo/data/aln/150.aln"
-    prunedTree = "prunedTree.tre" 
+    if len(sys.argv) != 4 : 
+        print USAGE
+        sys.exit()
 
-    tree = Phylo.read(treeFile, "newick")
-    tree.prune("Species144")
-    Phylo.write(tree, prunedTree, "newick")
+    tree = sys.argv[1]
+    taxon = sys.argv[2]
+    aln = sys.argv[3]
 
-    lwTree = Tree(prunedTree)
-    lwTree.computeLWs(alnFile, True)
-    os.remove(prunedTree)
+    t = LwTree(tree)
+    t.pruneTaxa([taxon])
+    t.computeLWs(aln, False)
+    
+    print t.write(format=2, features = ["lw"])
 
-    print lwTree.lwTree.format("newick")
-    print lwTree.scoreBipartition(["Species005", "Species202", "Species026"])
+
+    

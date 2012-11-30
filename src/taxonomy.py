@@ -2,7 +2,7 @@
 
 import sys 
 import random 
-import newick as nw 
+from ete2 import *
 import copy 
 
 
@@ -104,15 +104,20 @@ class Taxonomy(object):
         fh.close()
 
 
+
+
     def init_extractRandomlyFromTree(self, treeFile, maxLevels=7): 
-        "Create a taxonomy that is consistent with a given tree. The maximum depth of a leave in this taxonomy is <maxLevel>. Also note, that the taxonomy will consider the given rooting for the tree. If the tree is unrooted the newick-string representation is used as a basis."
-        
-        rawTree = open(treeFile, "r").readline().strip().replace(":0.0;", "")
-        tree = nw.parse_tree(rawTree)
-        idfact = IdFactory( tree.get_leaves_identifiers(), 0)
+        """Create a taxonomy that is consistent with a given tree. The
+        maximum depth of a leave in this taxonomy is <maxLevel>. Also
+        note, that the taxonomy will consider the given rooting for
+        the tree. If the tree is unrooted the newick-string
+        representation is used as a basis."""
+
+        tree = Tree(treeFile)
+        idfact = IdFactory( tree.get_leaf_names(), 0)
         self.root = idfact.produceId()
         self.__traversal(self.root, tree, maxLevels, 0, idfact)
-        
+
         # populate the other dict 
         for child in  self.childToParent.keys():
             parent = self.childToParent[child]            
@@ -121,30 +126,23 @@ class Taxonomy(object):
             else : 
                 self.parentToChildren[parent] = [child]
         self.dirty = True
-        self.cleanup()
-        
+        self.cleanup()        
 
 
-    def __traversal(self, currentParent, tree, maxLevels, currentDepth, idFact):
-        if(type(tree) == nw.tree.Leaf): 
+    def __traversal(self, currentParent, tree, maxLevels, currentDepth, idFact): 
+        if(tree.is_leaf()): 
             pass 
-        elif(type(tree) == nw.tree.Tree):             
-            if(random.random() <  0.5 and currentDepth < maxLevels ): 
-                newId = idFact.produceId() 
-                
+        else : 
+            if(random.random() < 0.5 and currentDepth < maxLevels): 
+                newId = idFact.produceId()
                 self.childToParent[newId] = currentParent
                 currentParent = newId
-                for leave in tree.get_leaves_identifiers(): 
+                for leave in tree.get_leaf_names(): 
                     self.childToParent[leave] = newId
-            for elem in tree.get_edges():
+            for elem in tree.get_children(): 
                 self.__traversal(currentParent, elem, maxLevels, currentDepth + 1, idFact)
-        elif(type(tree) == tuple): 
-            self.__traversal(currentParent, tree[0], maxLevels, currentDepth, idFact )
-        else : 
-            sys.stderr.write("tree does not seem to follow proper newick format. Aborting.\n")
-            sys.exit() 
 
-        
+
     def cleanup(self): 
         " To be called when dirty. "
         if(self.dirty): 
@@ -407,15 +405,19 @@ if __name__ == "__main__":
     if len(sys.argv) != 2: 
         print "usage: ./script <file>"
         sys.exit()
-
+        
     tax = Taxonomy()
-    tax.init_parseTaxFile("test.tax")
+    tax.init_extractRandomlyFromTree(sys.argv[1] )
+    print tax.getNewickString()
 
-    tax2 = Taxonomy()
-    tax2.init_parseTaxFile("test2.tax")
+    # tax = Taxonomy()
+    # tax.init_parseTaxFile("test.tax")
+
+    # tax2 = Taxonomy()
+    # tax2.init_parseTaxFile("test2.tax")
     
-    if tax == tax2: 
-        print "tax are same"
-    else : 
-        print "tax are different"
+    # if tax == tax2: 
+    #     print "tax are same"
+    # else : 
+    #     print "tax are different"
 
