@@ -1,0 +1,1 @@
+* copy content of /hits/sco/mislabelProj/precomputedLWs
