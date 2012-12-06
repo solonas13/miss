@@ -397,27 +397,114 @@ class Taxonomy(object):
         return result
 
 
+    # def getPseudoRankDict(self): 
+    #     """Assigns a rank to each node. The ranks are consistent among
+    #     each other and start from the leaves."""
+
+    #     nodes = set(self.getLeaves()) 
+
+    #     maxLevel = self.getMaxLevel()
+    #     pseudoRanks = {}
+    #     for node in nodes: 
+    #         pseudoRanks[node] = "rank_%d" % maxLevel
+    #     nodes = set(map(lambda x : self.childToParent[x], nodes))
+
+    #     for level in range(0, maxLevel): 
+    #         levelOfInterest = maxLevel-1 - level 
+    #         nodesOfInterest = set(filter(lambda x : self.getDepth(x) == levelOfInterest, nodes)) 
+    #         parents = map(lambda x : self.childToParent[x] if self.childToParent.has_key(x) else self.root, nodesOfInterest)
+    #         nodes = nodes - nodesOfInterest    
+    #         nodes |= set(parents) 
+            
+    #         for node in nodesOfInterest: 
+    #             assert(not pseudoRanks.has_key(node))
+    #             pseudoRanks[node] = "rank_%d" % levelOfInterest
+                
+    #     return pseudoRanks
+
+    # def getNCBILikeStrings(self): 
+    #     rankDict = self.getPseudoRankDict()
+    #     leaves = self.getLeaves()
+    #     strings = map(lambda x : "", leaves)
+
+    #     # handle leaves 
+    #     ctr = 0
+    #     for leave in self.getLeaves(): 
+    #         ancestor = self.childToParent[leave] 
+    #         strings[ctr] += "%s\t%s_%d" % (leave,rankDict[leave], ctr )
+    #         ctr += 1
+
+    #     newLeaves = map(lambda x : self.childToParent[x] if self.childToParent.has_key(x) else self.root, leaves)
+    #     levelsToDo = 5 
+    #     for i in range(0, levelsToDo): 
+    #         theLevel = levelsToDo - i
+    #         print "treating level %d" % theLevel
+    #         ctr = 0
+
+    #         madeUpCtr = 0
+    #         for l in newLeaves:
+    #             if self.getDepth(l) == theLevel : 
+    #                 strings[ctr] += "\t%s" %  rankDict[l]
+                    
+    #             else : 
+    #                 strings[ctr] += "\trank_%d_%d" %  (theLevel , madeUpCtr)
+    #                 madeUpCtr  += 1 
+                    
+    #             ctr += 1 
+
+
+
+    #         newLeaves = map(lambda x : 
+    #                         ( self.childToParent[x] if self.childToParent.has_key(x) else self.root ) , newLeaves)
+            
+    #     return strings
+
+
+    def getNCBILikeStrings(self): 
+        """ Simulates ranks for the current taxonomy and returns a
+        list of strings according to specfied format.  """
+
+        if self.getMaxLevel() > 6: 
+            sys.stderr.write("Taxonomy must not have more than 6 levels.\n")
+            sys.exit()
+
+        state = self.getLeaves()
+        strings = map(lambda x : "%s" % x , state)
+        state = map(lambda x:  self.childToParent[x], state )
+        
+        for i in range(0, 6): 
+            currentLevel = 6 - i
+            # print currentLevel
+            ctr = 0
+            madeUpCtr = 0
+            for l in state: 
+                if self.getDepth(l) == currentLevel:
+                    strings[ctr] += "\trank_%d_%s" % (currentLevel,l )
+                    state[ctr] = self.childToParent[l]
+                else: 
+                    strings[ctr]  += "\trank_%d_x%d" % (currentLevel,madeUpCtr)                    
+                    madeUpCtr += 1                
+                ctr += 1 
+
+        assert(set(state) == set(self.root))
+            
+        return strings
+        
+        
+        
+
+            
 ################
 # END
 
 
-if __name__ == "__main__":
-    if len(sys.argv) != 2: 
-        print "usage: ./script <file>"
-        sys.exit()
-        
+if __name__ == "__main__":        
     tax = Taxonomy()
-    tax.init_extractRandomlyFromTree(sys.argv[1] )
-    print tax.getNewickString()
+    tax.init_parseTaxFile("/lhome/labererae/proj/miss/data/simulated/easy/correctTaxonomy.88.1.2.5.tax")
 
-    # tax = Taxonomy()
-    # tax.init_parseTaxFile("test.tax")
+    strings = tax.getNCBILikeStrings()
+    for aString in strings:
+        print  aString
 
-    # tax2 = Taxonomy()
-    # tax2.init_parseTaxFile("test2.tax")
-    
-    # if tax == tax2: 
-    #     print "tax are same"
-    # else : 
-    #     print "tax are different"
+    # print tax.getNewickString() 
 
