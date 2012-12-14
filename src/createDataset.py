@@ -144,6 +144,10 @@ def createSimilarTree(alnFile, maxDist, maxIter, theId, useParsimony=True):
 
    return (bestDistance, bestTree)
 
+
+
+
+
 #########
 # main  #
 #########

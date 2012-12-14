@@ -201,6 +201,9 @@ class LwTree(Tree):
         
         # sometimes summing leads to values > 1.0
         return min(score,1.0) 
+
+
+
         
 
 

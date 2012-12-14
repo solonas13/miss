@@ -3,7 +3,8 @@
 import sys 
 import random 
 from ete2 import *
-import copy 
+# import copy 
+from extendedTree import *
 
 
 # a flexible representation of a taxonomy that
@@ -397,68 +398,6 @@ class Taxonomy(object):
         return result
 
 
-    # def getPseudoRankDict(self): 
-    #     """Assigns a rank to each node. The ranks are consistent among
-    #     each other and start from the leaves."""
-
-    #     nodes = set(self.getLeaves()) 
-
-    #     maxLevel = self.getMaxLevel()
-    #     pseudoRanks = {}
-    #     for node in nodes: 
-    #         pseudoRanks[node] = "rank_%d" % maxLevel
-    #     nodes = set(map(lambda x : self.childToParent[x], nodes))
-
-    #     for level in range(0, maxLevel): 
-    #         levelOfInterest = maxLevel-1 - level 
-    #         nodesOfInterest = set(filter(lambda x : self.getDepth(x) == levelOfInterest, nodes)) 
-    #         parents = map(lambda x : self.childToParent[x] if self.childToParent.has_key(x) else self.root, nodesOfInterest)
-    #         nodes = nodes - nodesOfInterest    
-    #         nodes |= set(parents) 
-            
-    #         for node in nodesOfInterest: 
-    #             assert(not pseudoRanks.has_key(node))
-    #             pseudoRanks[node] = "rank_%d" % levelOfInterest
-                
-    #     return pseudoRanks
-
-    # def getNCBILikeStrings(self): 
-    #     rankDict = self.getPseudoRankDict()
-    #     leaves = self.getLeaves()
-    #     strings = map(lambda x : "", leaves)
-
-    #     # handle leaves 
-    #     ctr = 0
-    #     for leave in self.getLeaves(): 
-    #         ancestor = self.childToParent[leave] 
-    #         strings[ctr] += "%s\t%s_%d" % (leave,rankDict[leave], ctr )
-    #         ctr += 1
-
-    #     newLeaves = map(lambda x : self.childToParent[x] if self.childToParent.has_key(x) else self.root, leaves)
-    #     levelsToDo = 5 
-    #     for i in range(0, levelsToDo): 
-    #         theLevel = levelsToDo - i
-    #         print "treating level %d" % theLevel
-    #         ctr = 0
-
-    #         madeUpCtr = 0
-    #         for l in newLeaves:
-    #             if self.getDepth(l) == theLevel : 
-    #                 strings[ctr] += "\t%s" %  rankDict[l]
-                    
-    #             else : 
-    #                 strings[ctr] += "\trank_%d_%d" %  (theLevel , madeUpCtr)
-    #                 madeUpCtr  += 1 
-                    
-    #             ctr += 1 
-
-
-
-    #         newLeaves = map(lambda x : 
-    #                         ( self.childToParent[x] if self.childToParent.has_key(x) else self.root ) , newLeaves)
-            
-    #     return strings
-
 
     def getNCBILikeStrings(self): 
         """ Simulates ranks for the current taxonomy and returns a
@@ -474,7 +413,6 @@ class Taxonomy(object):
         
         for i in range(0, 6): 
             currentLevel = 6 - i
-            # print currentLevel
             ctr = 0
             madeUpCtr = 0
             for l in state: 
@@ -489,22 +427,193 @@ class Taxonomy(object):
         assert(set(state) == set(self.root))
             
         return strings
-        
-        
-        
 
+
+    
+
+    def init_extractRandomlyFromTreeImproved(self, treeFile, maxlevel=7, usePatristicDistance = True, useMidpoint=False): 
+        # """An improved algorithm to condense a tree into a
+        # phylogeny. """ 
+
+        tr = ExtendedTree(treeFile)
+        
+        if not usePatristicDistance: 
+            for n in tr.get_descendants():
+                n.dist = 1.0
+
+        if not useMidpoint: 
+            tr.rootByInnermostNode() 
+        else  : 
+            tr.set_outgroup(tr.get_midpoint_outgroup())
+
+        for n in tr.get_leaves():
+            ranksAlready = 0
+            tmp = n
+            while(tmp != tr):
+                if len(tmp.get_children()) > 2 : 
+                    ranksAlready += 1
+                tmp = tmp.up
+
+            steps = 0
+            totalDist = 0.0
+            tmp = n
+            nodeList = []
+            while(tmp != tr): 
+                if len(tmp.get_children()) > 2 : 
+                    break; 
+                steps += 1 
+                totalDist += tmp.dist
+                if not tmp.is_root() and not tmp.is_leaf(): 
+                    nodeList.append(tmp)
+                tmp = tmp.up 
+
+            nodesToRemain = min(maxlevel - 1 - ranksAlready, steps / 2 ) 
+            # print "%d nodes should remain " % nodesToRemain
             
+            origNodeList = nodeList 
+
+            total = 0
+            weightDict = {}            
+            for n in nodeList: 
+                tmp = sum(map(lambda x : x.dist, n.get_descendants()))
+                total += tmp
+                weightDict[n] = tmp
+
+            # sample 
+            remaining = []
+            while len(remaining) < nodesToRemain: 
+                num = random.random() * total 
+                for elem in weightDict.items():
+                    num -= elem[1]
+                    if num <= 0 : 
+                        del weightDict[elem[0]]
+                        total -= elem[1]
+                        remaining.append(elem[0])
+
+            for elem in origNodeList: 
+                if elem not in remaining: 
+                    assert(not elem.is_root() and not elem.is_leaf())
+                    elem.delete()
+        
+        #  assign ids 
+        ctr = 0
+        tr.add_feature("tax_id", str(ctr))
+        ctr += 1
+        mapNameToTaxId = {}
+        for elem in tr.get_descendants():
+            elem.add_feature("tax_id", str(ctr))
+            if elem.is_leaf(): 
+                mapNameToTaxId[elem.name] = str(ctr)
+            ctr += 1 
+
+        # populate mapping 
+        for elem in tr.get_descendants():
+            if not elem.is_root(): 
+                self.childToParent[elem.tax_id] = elem.up.tax_id
+
+
+        # create inverse mapping 
+        for (child,parent) in self.childToParent.items(): 
+            if self.parentToChildren.has_key(parent): 
+                self.parentToChildren[parent].append(child)
+            else : 
+                self.parentToChildren[parent] = [child]
+
+        potRoot = set(map(lambda x : x[1], self.childToParent.items())) -  set(map(lambda x : x[0], self.childToParent.items()))
+        assert(len(potRoot) == 1 )
+        self.root = list(potRoot)[0]
+        return mapNameToTaxId
+
+
+    
+
+
+    def getLeavesBelowInnerNode(self, node):         
+        """ 
+        For an inner node <node> this function returns all leaves that
+        have <node> as an ancestor.
+        """ 
+        
+        result = []
+        if node in self.getLeaves(): 
+            result = [node ]
+        else : 
+            for n in self.parentToChildren[node]: 
+                result.extend(self.getLeavesBelowInnerNode(n))
+        return result
+
+
+    def taxonomyFitsTree(self, treeFile, nameMapping):         
+        """ 
+        Returns a boolean indicating, whether the taxonomy is
+        consistent with the tree in treefile or not.
+        
+        You need to specify a mapping file that maps taxa names to tax
+        ids (that are also used in the underlying taxonomy).
+        """ 
+
+        # invert name mapping 
+        inverseNames = {}
+        for elem in nameMapping.keys():
+            inverseNames[nameMapping[elem]] = elem 
+
+        assert(len(nameMapping) == len(inverseNames))
+
+        # some random but appropriate taxa for rooting the tree  
+        leaves = self.getLeaves()
+        steps = 0 
+        rootNode = self.parentToChildren[self.root][0] 
+        currentNode = rootNode
+        while(currentNode not in  leaves): 
+            currentNode = self.parentToChildren[currentNode][0]
+            steps += 1 
+        bipForRooting = set(self.getNthBipartition(currentNode, steps))
+
+        # tree 
+        tr = Tree(treeFile)
+        tr.unroot()
+        
+        mappedBip = map(lambda x : x[0], filter(lambda x : x[1] in bipForRooting , nameMapping.items()) ) 
+
+        complement = list(set(tr.get_leaf_names())  - set(mappedBip) ) 
+        ctr = 0
+        while(ctr < len(complement) and len( tr.get_common_ancestor(list(mappedBip)).get_leaves()) != len(mappedBip)  ): 
+            tr.set_outgroup(complement[ctr])
+            ctr += 1 
+
+        if ctr == len(complement) : 
+            return False 
+        else : 
+            assert(len(tr.get_common_ancestor(list(mappedBip)).get_leaves()) ==  len(mappedBip)) 
+            tr.set_outgroup(tr.get_common_ancestor(list(mappedBip)))
+        
+        # if we made it until here, the tree is now properly aligned with the taxonomy
+        for innerNode in set(self.parentToChildren.keys()) - set(self.root) : 
+            leavesBelow = self.getLeavesBelowInnerNode(innerNode)
+            
+            for l in leavesBelow: 
+                assert(not self.parentToChildren.has_key(l)) 
+            
+
+            a = tr.get_common_ancestor(map(lambda x : inverseNames[x] , leavesBelow))
+            if len (a.get_leaves())  != len(leavesBelow) : 
+                return False 
+        return True 
+
+
+
 ################
 # END
 
-
 if __name__ == "__main__":        
     tax = Taxonomy()
-    tax.init_parseTaxFile("/lhome/labererae/proj/miss/data/simulated/easy/correctTaxonomy.88.1.2.5.tax")
+    treeFile = "/lhome/labererae/proj/miss/data/origData/128.tre"
+    nameMapping = tax.init_extractRandomlyFromTreeImproved(treeFile, maxlevel = 4 , usePatristicDistance = False, useMidpoint = False)    
 
-    strings = tax.getNCBILikeStrings()
-    for aString in strings:
-        print  aString
-
-    # print tax.getNewickString() 
+    tmp = list(tax.getLeaves())
+    random.shuffle(tmp)
+    taxon = tmp[0]
+    tax.mislabel(taxon, 2,2)
+    assert( tax.taxonomyFitsTree(treeFile, nameMapping)) 
+        
 
