@@ -141,19 +141,24 @@ class LwTree(Tree):
         # here. Notice, that this requires, that the partition file
         # bears the same name the aln file, but with file extension
         # .par.         
-        potentialPartitionFile = os.path.splitext(alnFile)[0] + ".par"        
+        potentialPartitionFile = os.path.splitext(alnFile)[0] + ".par" 
         if os.path.exists(potentialPartitionFile): 
             run.append("-q")
             run.append(potentialPartitionFile)
-        
+
         with open(os.devnull, "w") as fnull: 
-            bla = subprocess.call(run, stdout = fnull)
+            bla = subprocess.call(run   , stdout = fnull )
+
+        resultFile  = "RAxML_portableTree." + theid + ".jplace"
+        if not os.path.exists(resultFile): 
+            sys.stderr.write("standard raxml did not terminate successfully. Please verify the call \n%s\n" % " ".join(run))
+            sys.exit()
         os.remove(tmpFileName)
 
         if(ml): 
-            self.__annotateWithAllLws(open("RAxML_portableTree." + theid + ".jplace", "r").read())
+            self.__annotateWithAllLws(open(resultFile, "r").read())
         else : 
-            self.__annotateWithParsLws(open("RAxML_portableTree." + theid + ".jplace", "r").read())
+            self.__annotateWithParsLws(open(resultFile, "r").read())
 
         # cleanup 
         for elem in glob.glob(os.getcwd() + "/*." + theid): 
@@ -161,50 +166,71 @@ class LwTree(Tree):
         for elem in glob.glob(os.getcwd() + "/RAxML*." + theid + ".jplace"): 
             os.remove(elem)
 
+        sumLw = sum(map(lambda x : x.lw, self.get_descendants()))
+        if abs(1.0 - sumLw) > 0.00001 : 
+            print "sum of lws was %f" % sumLw
+        assert(abs(1.0 - sumLw) < 0.00001)       
 
-    def getLcaScore(self, bipartition): 
+
+    def rootWithPartition(self, bip):        
+        """ root by the lca of bip in an unrooted tree """ 
+        # :TRICKY: this is problematic...we may not find a good root
+        # for the tree and this would have a bad impact on our score
+        self.unroot()
+        bip = set(bip)
+
+        bestNum = 0 
+        best = self
+        for elem in self.get_descendants(): 
+            leavesBelow = elem.get_leaf_names() 
+            numLeaves =  len(leavesBelow)
+
+            if not set(leavesBelow) & bip and numLeaves > bestNum: 
+                best = elem 
+                bestNum = numLeaves        
+        self.set_outgroup(best)
+
+
+    def getLcaScore(self, bipartition, rootingPartition): 
         """
         The lca score: find the lca of all the taxa in bipartition and
         sum up the liklihood weights in the subtree below the lca. 
         Thus the score ranges in [0,1]
         """ 
-        # :TODO: unrooting necessary? 
-        # self.unroot()
+        self.rootWithPartition(rootingPartition)
+
+        for elem in self.get_descendants(): 
+            if not hasattr(elem, "lw") :
+                elem.add_feature("lw", 0.0)
 
         bipartition = set(bipartition)
 
-        # if len(bipartition) == 1 :
-        #     res = self.search_nodes(name=desc.get_leaf_names()[0])
-        #     assert(len(res) == 1) 
-        #     score =  res.lw 
-        # else : 
         subtree = self.get_common_ancestor(list(bipartition))
         score = sum(map(lambda x : x.lw, subtree.get_descendants())) 
 
         return score 
 
 
-    def getOverlapScore(self, bipartition): 
+    def getOverlapScore(self, bipartition, rootingPartition): 
         """
         The score, Andre proposed: the likelihood weight at each
         branch is weighted by the proportion of leaves that are of the
         same rank as the mislabel candidate.
         """
-        # :TODO: unrooting necessary? 
-        # self.unroot()
+        self.rootWithPartition(rootingPartition)
         
+        for elem in self.get_descendants(): 
+            if not hasattr(elem, "lw") :
+                elem.add_feature("lw", 0.0)
+
+
         bipartition = set(list(bipartition)) 
-        # bipComplement = set(self.get_leaf_names()) - bipartition
 
         score =  sum(map(lambda x :  x.lw *  float(len(bipartition &  set(x.get_leaf_names() ) ))  /  float(len(set(x.get_leaf_names() ) )) ,
                          self.get_descendants()) ) 
         
         # sometimes summing leads to values > 1.0
         return min(score,1.0) 
-
-
-
-        
 
 
 USAGE= """./script <tree> <taxon> <aln> 

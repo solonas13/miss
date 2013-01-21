@@ -3,7 +3,6 @@
 import sys 
 import random 
 from ete2 import *
-# import copy 
 from extendedTree import *
 
 
@@ -51,8 +50,7 @@ class Taxonomy(object):
     
     """ 
 
-
-
+    
     def __init__(self): 
         "Note: when parsing taxonomies with inner nodes, you may want to cleanup the taxonomy right after parsing to throw out inner nodes with only one child. "
         self.root = None
@@ -130,6 +128,21 @@ class Taxonomy(object):
         self.cleanup()        
 
 
+    def getPartitionForRooting(self): 
+        """ Returns the smallest partition, that can be used to root a tree with this taxonomy. """
+        topLevel = self.parentToChildren[self.root]
+        num = len(self.getLeaves())
+        best = topLevel[0]
+
+        for elem in topLevel: 
+            numHere = len(self.getLeavesBelowInnerNode(elem))
+            if numHere < num: 
+                best = elem 
+        return self.getLeavesBelowInnerNode(best)
+            
+    
+
+
     def __traversal(self, currentParent, tree, maxLevels, currentDepth, idFact): 
         if(tree.is_leaf()): 
             pass 
@@ -188,7 +201,7 @@ class Taxonomy(object):
         """ 
         self.dirty = True
         
-        leaves = self.getLeaves()            
+        leaves = self.getLeaves() 
         assert(leave in leaves)
         
         # go n steps up  
@@ -238,7 +251,7 @@ class Taxonomy(object):
         isEqual = True
         for leave in leaves: 
             for level in range(1, md) : 
-                isEqual = isEqual and ( set(self.getNthBipartition(leave, level)) == set(other.getNthBipartition(leave, level)) )         
+                isEqual = isEqual and ( set(self.getNthBipartition(leave, level)) == set(other.getNthBipartition(leave, level)) ) 
         return isEqual
 
 
@@ -615,5 +628,3 @@ if __name__ == "__main__":
     taxon = tmp[0]
     tax.mislabel(taxon, 2,2)
     assert( tax.taxonomyFitsTree(treeFile, nameMapping)) 
-        
-
