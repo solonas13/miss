@@ -538,9 +538,23 @@ class Taxonomy(object):
         return mapNameToTaxId
 
 
-    
+
+    def renameLeaves(self, renameHash) : 
+        """ 
+        Renames leaves for a given map (oldID->newID).  The reason, we
+        may need this, is that a lot of taxid change in the ncbi
+        taxonomy.
+        """
+
+        for (child,parent) in self.childToParent.items():
+            if renameHash.has_key(child):
+                del self.childToParent[child]
+                self.childToParent[renameHash[child]] = parent 
+
+        self.__rebuildWithRelevant(self.getLeaves())
 
 
+                
     def getLeavesBelowInnerNode(self, node):         
         """ 
         For an inner node <node> this function returns all leaves that
