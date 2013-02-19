@@ -284,10 +284,10 @@ class Taxonomy(object):
     def getInnerNodes(self): 
         return set(self.parentToChildren.keys())
 
-    def getLeaves(self): 
+    def getLeaves(self):                 
         parents = set(self.parentToChildren.keys())
         children = set(self.childToParent.keys())
-        return children - parents
+        return (children - parents)  | ( self.internalLeaves)
 
 
 
@@ -327,7 +327,7 @@ class Taxonomy(object):
     def __handleMonofurcations(self, node, leaves): 
         if node in leaves:  
             return node 
-        elif len(self.parentToChildren[node] ) > 1 : 
+        elif len(self.parentToChildren[node] ) > 1 or node in self.internalLeaves: 
             newChildren =  []
             for child in self.parentToChildren[node]: 
                 newChild = self.__handleMonofurcations(child, leaves)
@@ -339,6 +339,7 @@ class Taxonomy(object):
             return node 
         else:
             assert(len(self.parentToChildren[node] ) == 1 ) 
+            
             currentChild = self.parentToChildren[node][0]
 
             # remove self 
@@ -350,14 +351,18 @@ class Taxonomy(object):
 
 
     def __rebuildWithRelevant(self, relevantLeaves): 
+        self.internalLeaves =set()
+
         # update childToParent
         newChildToParent = {}
         for leave in relevantLeaves:
             currentNode = leave
             assert(currentNode != self.root)
-            while(currentNode != self.root): 
+            assert(self.childToParent.has_key(currentNode))
+            while(currentNode != self.root):                 
                 newChildToParent[currentNode] = self.childToParent[currentNode]
                 currentNode = self.childToParent[currentNode]       
+            assert(currentNode == self.root)
         self.childToParent = newChildToParent
         
         #  update parentToChildren
@@ -371,8 +376,13 @@ class Taxonomy(object):
             else : 
                 self.parentToChildren[parent] = newChildren
 
+        self.internalLeaves = set(relevantLeaves) - set(self.getLeaves())
+
         # check from root on, if there are mono-furcations in the taxonomy 
         self.root = self.__handleMonofurcations(self.root, self.getLeaves())
+
+        for r in relevantLeaves: 
+            assert(self.childToParent.has_key(r))
 
 
 
@@ -385,8 +395,11 @@ class Taxonomy(object):
 
         
     def __checkConsistency(self): 
-        num = self.__getNumEdgesForCheck(self.root, self.getLeaves())
-        assert(len(self.childToParent.items()) == num - 1 ) 
+        pass 
+        # :TODO: this is meaniangless w/ internal leaves 
+        
+        # num = self.__getNumEdgesForCheck(self.root, self.getLeaves())
+        # assert(len(self.childToParent.items()) == num - 1 ) 
 
 
     def __getNumEdgesForCheck(self, node, leaves): 
